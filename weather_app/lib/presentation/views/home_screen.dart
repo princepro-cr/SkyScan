@@ -1,5 +1,5 @@
 import 'dart:ui';
-import 'package:flutter/material.dart' hide ErrorWidget;
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/weather_provider.dart';
 import '../widgets/weather_card.dart';
@@ -11,50 +11,90 @@ import '../../core/utils/weather_utils.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  bool _searchOpen = false;
+  final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _fetchWeather());
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _fetchLocation());
   }
 
-  Future<void> _fetchWeather() async {
-    await context.read<WeatherProvider>().fetchWeatherByCurrentLocation();
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchLocation() async {
+    await context
+        .read<WeatherProvider>()
+        .fetchWeatherByCurrentLocation();
+  }
+
+  void _openSearch() {
+    setState(() => _searchOpen = true);
+    Future.delayed(
+      const Duration(milliseconds: 80),
+      () => _searchFocus.requestFocus(),
+    );
+  }
+
+  void _closeSearch() {
+    setState(() {
+      _searchOpen = false;
+      _searchController.clear();
+    });
+    _searchFocus.unfocus();
+  }
+
+  void _submitSearch() {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) {
+      _closeSearch();
+      return;
+    }
+    context.read<WeatherProvider>().fetchWeatherByCity(query);
+    _closeSearch();
   }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<WeatherProvider>(
-      builder: (context, weatherProvider, child) {
-        final weather = weatherProvider.weather;
+      builder: (context, provider, _) {
+        final weather = provider.weather;
         final weatherType = weather != null
-            ? WeatherUtils.getWeatherTypeFromCondition(weather.conditionId ?? 800)
+            ? WeatherUtils.getWeatherTypeFromCondition(
+                weather.conditionId ?? 800)
             : WeatherType.clear;
         final isDay = WeatherUtils.isDayTime(DateTime.now());
 
         return Scaffold(
           extendBodyBehindAppBar: true,
+          resizeToAvoidBottomInset: false,
           body: Stack(
             children: [
-              // 1. Dynamic Background Layer
               WeatherBackground(
                 weatherType: weatherType,
                 isDay: isDay,
-                child: Container(color: Colors.black.withOpacity(0.1)),
+                child: Container(
+                    color: Colors.black.withOpacity(0.1)),
               ),
-
-              // 2. Content Layer
               CustomScrollView(
                 physics: const BouncingScrollPhysics(),
                 slivers: [
-                  _buildGlassAppBar(),
+                  _buildAppBar(provider),
                   SliverToBoxAdapter(
-                    child: _buildMainContent(weatherProvider, weatherType),
+                    child: _buildMainContent(
+                        provider, weatherType),
                   ),
                 ],
               ),
@@ -65,7 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildGlassAppBar() {
+  Widget _buildAppBar(WeatherProvider provider) {
     return SliverAppBar(
       expandedHeight: 0,
       floating: true,
@@ -80,33 +120,116 @@ class _HomeScreenState extends State<HomeScreen> {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white24),
+                border:
+                    Border.all(color: Colors.white24),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'SKYSCAN',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                      letterSpacing: 4,
-                      color: Colors.white,
+              child: AnimatedCrossFade(
+                duration: const Duration(milliseconds: 200),
+                crossFadeState: _searchOpen
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                // ── Default bar ──
+                firstChild: Row(
+                  mainAxisAlignment:
+                      MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'SKYSCAN',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        letterSpacing: 4,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                  GestureDetector(
-                    onTap: _fetchWeather,
-                    child: const Icon(
-                      Icons.refresh_rounded,
-                      color: Colors.white,
-                      size: 20,
+                    Row(
+                      children: [
+                        // Back to location button
+                        // (only shown when viewing a searched city)
+                        if (provider.isShowingCity)
+                          GestureDetector(
+                            onTap: _fetchLocation,
+                            child: Padding(
+                              padding: const EdgeInsets.only(
+                                  right: 14),
+                              child: Icon(
+                                Icons.near_me_rounded,
+                                color: Colors.white
+                                    .withOpacity(0.7),
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        GestureDetector(
+                          onTap: _openSearch,
+                          child: const Icon(
+                            Icons.search_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        GestureDetector(
+                          onTap: provider.isShowingCity
+                              ? _fetchLocation
+                              : _fetchLocation,
+                          child: const Icon(
+                            Icons.refresh_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                // ── Search bar ──
+                secondChild: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: _closeSearch,
+                      child: const Icon(Icons.arrow_back_rounded,
+                          color: Colors.white70, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        focusNode: _searchFocus,
+                        onSubmitted: (_) => _submitSearch(),
+                        textInputAction: TextInputAction.search,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Search city...',
+                          hintStyle: TextStyle(
+                            color: Colors.white
+                                .withOpacity(0.35),
+                            fontSize: 14,
+                          ),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        cursorColor: Colors.white,
+                        cursorWidth: 1.5,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: _submitSearch,
+                      child: const Icon(Icons.send_rounded,
+                          color: Colors.white70, size: 18),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -115,20 +238,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMainContent(WeatherProvider provider, WeatherType type) {
+  Widget _buildMainContent(
+      WeatherProvider provider, WeatherType type) {
     if (provider.isLoading) return const LoadingWidget();
-    if (provider.errorMessage != null) {
-      return ErrorWidget(
-        message: provider.errorMessage!,
-        onRetry: _fetchWeather,
-      );
-    }
+    // if (provider.errorMessage != null) {
+    //   return ErrorWidget(
+    //     message: provider.errorMessage!,
+    //     onRetry: _fetchLocation,
+    //   );
+    // }
     if (provider.weather == null) return const SizedBox.shrink();
 
     return Padding(
       padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 72, // status bar + app bar height
-        bottom: MediaQuery.of(context).padding.bottom + 40,
+        top: MediaQuery.of(context).padding.top + 72,
+        bottom:
+            MediaQuery.of(context).padding.bottom + 40,
       ),
       child: Column(
         children: [

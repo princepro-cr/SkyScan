@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +12,16 @@ import 'presentation/views/home_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env');
+  
+  // Set system UI overlay style
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    systemNavigationBarColor: Color(0xFF87CEEB),
+    systemNavigationBarIconBrightness: Brightness.light,
+  ));
+  
   runApp(const MyApp());
 }
 
@@ -40,15 +51,18 @@ class MyApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'Weather App',
+        title: 'SkyScan Weather',
         theme: ThemeData(
           primarySwatch: Colors.blue,
           useMaterial3: true,
           appBarTheme: const AppBarTheme(
             centerTitle: true,
-            elevation: 4,
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+            foregroundColor: Colors.white,
           ),
-         
+          
+          fontFamily: 'Roboto',
         ),
         home: const HomeScreen(),
         debugShowCheckedModeBanner: false,
